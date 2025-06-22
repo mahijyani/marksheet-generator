@@ -15,6 +15,18 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # पूरा इतिहास fetch करेगा (Git submodules के लिए जरूरी)
+
+    - name: Verify Gradle Wrapper
+      run: |
+        if [ ! -f "gradlew" ]; then
+          echo "::warning::gradlew file missing, generating wrapper..."
+          ./gradlew wrapper || gradle wrapper
+        fi
+
+    - name: Make gradlew executable
+      run: chmod +x gradlew
 
     - name: Set up JDK 17
       uses: actions/setup-java@v3
@@ -22,45 +34,17 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Make gradlew executable
-      run: chmod +x gradlew
-
-    - name: Build debug APK
-      run: ./gradlew assembleDebug
-
-    - name: Build release APK/AAB
+    - name: Build with Gradle
       run: |
-        ./gradlew assembleRelease || echo "Release build failed"
-        ./gradlew bundleRelease || echo "Bundle build failed"
+        ./gradlew assembleDebug
+        ./gradlew assembleRelease || echo "Release build failed - continuing"
+        ./gradlew bundleRelease || echo "Bundle build failed - continuing"
 
-    - name: Find and list build outputs
-      run: |
-        echo "=== APK Files ==="
-        find app/build/outputs/apk -name "*.apk" -exec ls -lh {} \;
-        echo "=== AAB Files ==="
-        find app/build/outputs/bundle -name "*.aab" -exec ls -lh {} \;
-        echo "=== All Outputs ==="
-        ls -R app/build/outputs || true
-
-    - name: Upload APK Artifact
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: release-apk
+        name: android-build-outputs
         path: |
-          app/build/outputs/apk/**/*release*.apk
-          !app/build/outputs/apk/**/*unaligned*.apk
+          app/build/outputs/apk/**/*.apk
+          app/build/outputs/bundle/**/*.aab
         if-no-files-found: warn
-
-    - name: Upload AAB Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-aab
-        path: app/build/outputs/bundle/**/*release*.aab
-        if-no-files-found: warn
-
-    - name: Upload mapping file (for crash reporting)
-      uses: actions/upload-artifact@v4
-      with:
-        name: mapping-file
-        path: app/build/outputs/mapping/**/mapping.txt
-        if-no-files-found: ignore
